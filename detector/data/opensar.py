@@ -10,7 +10,9 @@ from detectron2.structures import BoxMode
 root = Path(os.path.abspath(os.path.dirname(__file__))).parent.parent
 
 
-def label_transform(label_in):
+def label_transform(label_in, level=1):
+    if level == 0:
+        return 0
     wrapper = {
         0: "Other",
         1: "Other",
@@ -34,17 +36,20 @@ def label_transform(label_in):
                 label_in = wrapper[label_in]
             else:
                 label_in = "Other"
-        return types.index(label_in) + 1
+        return types.index(label_in)
     else:
         assert label_in > 0
-        return types[label_in - 1]
+        return types[label_in]
 
 
-def get_opensar_dicts(path, img_type='vv', level=1):
+def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
     imgs = {'vv': [], 'vh': []}
     targets = []
-
-    for folder in path.glob("S*"):
+    num_images = 0
+    folders = [folder for folder in path.glob("S*")]
+    sorted(folders)
+    assert part in ['all', 'train', 'test']
+    for folder in folders:
         img_dict = {}
         img_size_dict = {}
         if not (folder / "chip_size.txt").exists():
@@ -67,6 +72,7 @@ def get_opensar_dicts(path, img_type='vv', level=1):
             img_dict["{}_{}_{}".format(x[1:], y[1:],
                                        t[:2])] = (image,
                                                   img_size_dict[x + "_" + y])
+            num_images += 1
         root = ET.parse(folder / "ship.xml").getroot()
         for ship in root:
             target = {}
@@ -81,6 +87,7 @@ def get_opensar_dicts(path, img_type='vv', level=1):
             targets.append(target)
             imgs['vv'].append(img_dict["{}_{}_vv".format(*target['center'])])
             imgs['vh'].append(img_dict["{}_{}_vh".format(*target['center'])])
+
     dataset_dicts = []
     for index, img_info in enumerate(imgs[img_type]):
         record = {}
@@ -96,38 +103,83 @@ def get_opensar_dicts(path, img_type='vv', level=1):
         ht = targets[index]['ht']
         box = targets[index]['box']
         w = ((ht[2] - ht[0])**2 + (ht[3] - ht[1])**2)**0.5
-        a = math.asin(abs(ht[3] - ht[1]) / w) / 3.1415926 * 180
+        ang = math.asin(abs(ht[3] - ht[1]) / w)
+        a = ang / 3.1415926 * 180
         if (ht[2] - ht[0]) * (ht[3] - ht[1]) > 0:
             a = -a
         w = w / (box[2] - box[0]) * width
         h = w / targets[index]['length'] * targets[index]['width']
-        obj = {
-            "bbox": [cx, cy, w, h, a],
-            "bbox_mode": BoxMode.XYWHA_ABS,
-            "category_id": 0,
-            "iscrowd": 0
-        }
-
+        if rotated:
+            obj = {
+                "bbox": [cx, cy, w, h, a],
+                "bbox_mode":
+                BoxMode.XYWHA_ABS,
+                "category_id":
+                label_transform(targets[index]['label'], level=level),
+                "iscrowd":
+                0
+            }
+        else:
+            hl = (w**2 + h**2)**0.5 * 0.5
+            x = hl * math.cos(ang) * 1.5
+            y = hl * math.sin(ang) * 2.1
+            obj = {
+                "bbox": [cx - x, cy - y, cx + x, cy + y],
+                "bbox_mode":
+                BoxMode.XYXY_ABS,
+                "category_id":
+                label_transform(targets[index]['label'], level=level),
+                "iscrowd":
+                0
+            }
         record["annotations"] = [obj]
         dataset_dicts.append(record)
+
+    categories = {}
+
+    for record in dataset_dicts:
+        category_id = record['annotations'][0]['category_id']
+        if category_id not in categories.keys():
+            categories[category_id] = [record]
+        else:
+            categories[category_id].append(record)
+    dataset_dicts = []
+    for category_id, category in categories.items():
+        num_ship = len(category)
+        print(num_ship)
+        dataset_dicts += category[:-num_ship //
+                                  5] if part != 'test' else category[
+                                      -num_ship // 5:]
     return dataset_dicts
 
 
-classes_list = {1: ["ship"]}
+classes_list = {
+    0: ["ship"],
+    1: [
+        "Wing in ground", "High speed craft", "Passenger", "Cargo", "Tanker",
+        "Other"
+    ]
+}
 
 
 def register_opensar_datasets():
-    for rotated in [True]:
-        for level, thing_classes in classes_list.items():
-            DatasetCatalog.register(
-                "opensar_" + str(level) + ("_r" if rotated else ""),
-                lambda level=level: get_opensar_dicts(
-                    root / "dataset" / "OpenSarShip", level=level))
-            MetadataCatalog.get("opensar_" + str(level) +
-                                ("_r" if rotated else "")).set(
-                                    thing_classes=thing_classes)
+    for rotated in [True, False]:
+        for part in ['train', 'test']:
+            for level, thing_classes in classes_list.items():
+                name = "opensar_" + str(level) + ("_r" if rotated else
+                                                  "") + "_" + part
+                DatasetCatalog.register(
+                    name,
+                    lambda level=level, part=part, rotated=rotated:
+                    get_opensar_dicts(root / "dataset" / "OpenSarShip",
+                                      part=part,
+                                      level=level,
+                                      rotated=rotated))
+                MetadataCatalog.get(name).set(thing_classes=thing_classes)
 
 
 if __name__ == "__main__":
-    dataset = get_opensar_dicts(root / "dataset" / "OpenSarShip")
-    print(len(dataset))
+    register_opensar_datasets()
+    DatasetCatalog.list()
+    dataset = DatasetCatalog.get("opensar_1_train")
+    print(dataset[0])

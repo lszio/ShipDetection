@@ -1,16 +1,17 @@
 import os
 import copy
 import numpy as np
+import cv2
 import torch
 from pathlib import Path
 from detectron2.engine import DefaultTrainer, DefaultPredictor
 from detectron2.structures import BoxMode
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
-from detectron2.evaluation import (RotatedCOCOEvaluator, DatasetEvaluators,
-                                   COCOEvaluator, inference_on_dataset)
+from detectron2.evaluation import (RotatedCOCOEvaluator, COCOEvaluator,
+                                   inference_on_dataset, DatasetEvaluators)
 from detectron2.data import (build_detection_train_loader, MetadataCatalog,
-                             build_detection_test_loader)
+                             DatasetCatalog, build_detection_test_loader)
 from detectron2.utils.visualizer import Visualizer
 from detectron2.modeling import build_model
 from .model import cfgs
@@ -46,10 +47,10 @@ def mapper(dataset_dict):
 class MyTrainer(DefaultTrainer):
     @classmethod
     def build_evaluator(cls, cfg, dataset_name):
-        output_folder = os.path.join(cfg.OUTPUT_DIR, "inference")
-        os.makedirs(output_folder, exist_ok=True)
+        output_dir = cfg.OUTPUT_DIR
+        os.makedirs(output_dir, exist_ok=True)
         evaluators = [
-            RotatedCOCOEvaluator(dataset_name, cfg, True, output_folder)
+            RotatedCOCOEvaluator(dataset_name, cfg, True, output_dir)
         ]
         return DatasetEvaluators(evaluators)
 
@@ -93,15 +94,15 @@ class Detector():
         }
         self.rotated = (name[-1] == 'r')
         self.metadata = MetadataCatalog.get(self.datasets['train'][0])
-        self.clear_cache()
+        self.predictor = None
 
     def clear_cache(self):
-        inference_dir = Path(self.cfg.OUTPUT_DIR) / "inference"
-        if inference_dir.exists():
-            for f in inference_dir.glob("*coco_format*"):
+        output_dir = Path(self.cfg.OUTPUT_DIR)
+        if output_dir.exists():
+            for f in output_dir.glob("*coco_format*"):
                 f.unlink()
 
-    def train(self, resume=False):
+    def train(self, resume=True):
         os.makedirs(self.cfg.OUTPUT_DIR, exist_ok=True)
         trainer = MyTrainer(self.cfg) if self.rotated else DefaultTrainer(
             self.cfg)
@@ -109,15 +110,16 @@ class Detector():
         trainer.train()
 
     def predict(self, im):
-        self.cfg.MODEL.WEIGHTS = os.path.join(self.cfg.OUTPUT_DIR,
-                                              "model_final.pth")
-        self.cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
-        predictor = DefaultPredictor(self.cfg)
-        return predictor(im)
+        if not self.predictor:
+            self.cfg.MODEL.WEIGHTS = os.path.join(self.cfg.OUTPUT_DIR,
+                                                  "model_final.pth")
+            self.cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
+            self.predictor = DefaultPredictor(self.cfg)
+        return self.predictor(im)
 
-    def eval(self):
+    def evaluate(self):
         Evaluator = RotatedCOCOEvaluator if self.rotated else COCOEvaluator
-        output_dir = os.path.join(self.cfg.OUTPUT_DIR, "inference")
+        output_dir = self.cfg.OUTPUT_DIR
         os.makedirs(output_dir, exist_ok=True)
         evaluator = Evaluator(self.datasets['test'][0], self.cfg, False,
                               output_dir)
@@ -128,8 +130,74 @@ class Detector():
         inference_on_dataset(model, val_loader, evaluator)
         return evaluator.evaluate()
 
+    def test(self, evaluator=None):
+        trainer = MyTrainer(self.cfg) if self.rotated else DefaultTrainer(
+            self.cfg)
+        trainer.resume_or_load(resume=True)
+        if not evaluator:
+            Evaluator = RotatedCOCOEvaluator if self.rotated else COCOEvaluator
+            output_dir = self.cfg.OUTPUT_DIR
+            os.makedirs(output_dir, exist_ok=True)
+            evaluator = Evaluator(self.datasets['test'][0], self.cfg, False,
+                                  output_dir)
+        return trainer.test(self.cfg, trainer.model, evaluator)
 
-detectors = {name: Detector(name, cfg) for name, cfg in cfgs.items()}
+    def draw_preds(self, im):
+        outputs = self.predict(im)
+        print(outputs)
+        visualizerClass = myVisualizer if self.rotated else Visualizer
+        v = visualizerClass(im[:, :, ::-1], metadata=self.metadata)
+        print(v)
+        v = v.draw_instance_predictions(outputs["instances"].to(
+            torch.device("cpu")))
+        return v.get_image()[:, :, ::-1]
+
+    def inference(self, dataset_name=None, output_dir=None):
+        if not dataset_name:
+            dataset_name = self.cfg.DATASETS.TEST[0]
+        if not output_dir:
+            output_dir = self.cfg.OUTPUT_DIR
+        dataset = DatasetCatalog.get(dataset_name)
+        pred_file = os.path.join(output_dir, dataset_name + "_predictions.txt")
+        ann_file = os.path.join(output_dir, dataset_name + "_annotations.txt")
+        outputs = []
+        for data in dataset:
+            image_id = data['image_id']
+            im = cv2.imread(data['file_name'])
+            preds = self.predict(im)
+            instances = preds["instances"].to(torch.device("cpu"))
+            boxes = instances.pred_boxes.tensor.numpy()
+            boxes = boxes.tolist()
+            scores = instances.scores.tolist()
+            classes = instances.pred_classes.tolist()
+            for j in range(len(instances)):
+                tmp = [str(image_id), str(classes[j]), str(scores[j])]
+                tmp += [str(i) for i in boxes[j]]
+                outputs.append(tmp)
+        with open(pred_file, 'w') as f:
+            for line in outputs:
+                f.write(" ".join(line) + "\n")
+        with open(ann_file, 'w') as f:
+            for data in dataset:
+                for instance in data['annotations']:
+                    line = [
+                        str(data['image_id']),
+                        str(instance['category_id']),
+                        *[str(i) for i in instance['bbox']]
+                    ]
+                    f.write(" ".join(line) + "\n")
+
+
+def get_detector(name):
+    if name not in cfgs.keys():
+        print("Doesn't have detector {}".formar(name))
+    return Detector(name, cfgs[name])
+
+
+detectors = {
+    name: lambda name=name: get_detector(name)
+    for name, cfg in cfgs.items()
+}
 
 if __name__ == "__main__":
     import pprint

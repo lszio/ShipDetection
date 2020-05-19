@@ -6,6 +6,10 @@ dataset/OpenSarShip
 inputs
 outputs
 models
+inference
+temp
+
+*.ipynb
 
 .ipynb_checkpoints
 __pycache__

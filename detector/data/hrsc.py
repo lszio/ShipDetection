@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import json
 import math
 import xml.etree.ElementTree as ET
 from detectron2.data import DatasetCatalog, MetadataCatalog
@@ -60,7 +61,7 @@ def hrsc_label_transform(label_in, level=1):
             return types[level][label_in]
 
 
-def get_hrsc_dicts(path, part='train', level=1, rotated=True):
+def get_hrsc_dicts(path, part='train', level=1, rotated=False, pure=False):
     with open(path / "ImageSets" / "{}.txt".format(part), 'r') as f:
         img_ids = f.readlines()
     img_ids = sorted([id.strip() for id in img_ids])
@@ -83,16 +84,24 @@ def get_hrsc_dicts(path, part='train', level=1, rotated=True):
             label = ship.find("Class_ID").text
             if rotated:
                 bbox = [float(ship[i].text) for i in [9, 10, 11, 12, 13]]
+                ang = bbox[-1] / math.pi * 180
+                bbox[-1] = -ang
+                mode = BoxMode.XYWHA_ABS
             else:
                 bbox = [float(ship[i].text) for i in [5, 6, 7, 8]]
+                mode = BoxMode.XYXY_ABS
+            category_id = hrsc_label_transform(label, level)
+            if pure and level > 0:
+                category_id -= 1
+            if category_id < 0:
+                continue
             obj = {
                 "bbox": bbox,
-                "bbox_mode":
-                BoxMode.XYWHA_ABS if rotated else BoxMode.XYXY_ABS,
-                "category_id": hrsc_label_transform(label, level),
+                "bbox_mode": mode,
+                "area": bbox[2] * bbox[3],
+                "category_id": category_id,
                 "iscrowd": 0
             }
-            obj['bbox'][-1] /= math.pi / 180 / -1
             objs.append(obj)
         record["annotations"] = objs
         dataset_dicts.append(record)
@@ -100,28 +109,85 @@ def get_hrsc_dicts(path, part='train', level=1, rotated=True):
 
 
 classes_list = {
-    1: ["ship"],
-    2: ["ship", "military", 'civil'],
-    3: ["ship", "aircraft carrier", "warship", "submarine", "merchant"]
+    0: ["ship"],
+    1: ["ship", "military", 'civil'],
+    2: ["ship", "aircraft carrier", "warship", "merchant", "submarine"]
 }
 
 
+def register_hrsc_dataset(root, level, rotated, thing_classes, pure=False):
+    if pure and level > 0:
+        thing_classes = thing_classes[1:]
+    for d in ["train", "val", "test"]:
+        name = "hrsc_" + str(level) + ("_p_" if pure and level > 0 else
+                                       "_") + ("r_" if rotated else "") + d
+        DatasetCatalog.register(
+            name, lambda d=d: get_hrsc_dicts(root, d, level, rotated, pure))
+        MetadataCatalog.get(name).set(thing_classes=thing_classes)
+
+
 def register_hrsc_datasets():
-    for rotated in [True, False]:
-        for level, thing_classes in classes_list.items():
-            for d in ["train", "val", "test"]:
-                DatasetCatalog.register(
-                    "hrsc_" + str(level) + ("_r_" if rotated else "_") + d,
-                    lambda d=d: get_hrsc_dicts(root / "dataset" / "HRSC",
-                                               d,
-                                               level=level,
-                                               rotated=rotated))
-                MetadataCatalog.get("hrsc_" + str(level) +
-                                    ("_r_" if rotated else "_") +
-                                    d).set(thing_classes=thing_classes)
+    for pure in [True, False]:
+        for rotated in [True, False]:
+            for level, thing_classes in classes_list.items():
+                if level == 0 and pure:
+                    continue
+                register_hrsc_dataset(root / "dataset" / "HRSC", level,
+                                      rotated, thing_classes, pure)
+
+
+def convert_to_coco(root, part="all", level=1, rotated=True, output_dir=None):
+    if not output_dir:
+        output_dir = Path()
+    thing_classes = classes_list[level]
+    categories = [{'id': k, 'name': v} for k, v in enumerate(thing_classes)]
+
+    info = {
+        "description": "HRSC" + " with rotated bbox",
+        "data_created": "2020-5-1"
+    }
+    dataset = get_hrsc_dicts(root, part, level, rotated)
+    images = []
+    annotations = []
+    ann_id = 0
+    for index, record in enumerate(dataset):
+        image = {
+            "file_name": Path(record['file_name']).name,
+            "width": record['width'],
+            'height': record['height'],
+            'id': index
+        }
+        images.append(image)
+        for ann in record['annotations']:
+            ann['image_id'] = index
+            ann['id'] = ann_id
+            ann_id += 1
+            annotations.append(ann)
+
+    coco = {
+        "info": info,
+        "images": images,
+        "annotations": annotations,
+        "categories": categories,
+        "licenses": None
+    }
+    file_name = "hrsc_{}{}_{}.json".format(str(level), "_r" if rotated else "",
+                                           part)
+    with open(output_dir / file_name, 'w') as f:
+        json.dump(coco, f)
+    return coco
 
 
 if __name__ == "__main__":
     DatasetCatalog.clear()
     register_hrsc_datasets()
     print(DatasetCatalog.list())
+    print(DatasetCatalog.get('hrsc_2_r_train')[0])
+
+    # convert_to_coco(root / "dataset" / "HRSC", "all")
+    # for level in [0, 1, 2]:
+    #     for part in ['train', 'val', 'test', 'all']:
+    #         for rotated in [True, False]:
+    #             convert_to_coco(root / "dataset" / "HRSC", part, level,
+    #                             rotated)
+    # pass

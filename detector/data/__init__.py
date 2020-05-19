@@ -7,7 +7,6 @@ def register_datasets():
     DatasetCatalog.clear()
     register_hrsc_datasets()
     register_opensar_datasets()
-    print(DatasetCatalog.list())
 
 
 if __name__ == "__main__":
