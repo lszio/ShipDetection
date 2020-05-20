@@ -14,7 +14,9 @@ from detectron2.data import (build_detection_train_loader, MetadataCatalog,
                              DatasetCatalog, build_detection_test_loader)
 from detectron2.utils.visualizer import Visualizer
 from detectron2.modeling import build_model
+
 from .model import cfgs
+from .evaluation import MyEvaluator
 
 
 def my_transform_instance_annotations(annotation,
@@ -135,7 +137,7 @@ class Detector():
             self.cfg)
         trainer.resume_or_load(resume=True)
         if not evaluator:
-            Evaluator = RotatedCOCOEvaluator if self.rotated else COCOEvaluator
+            Evaluator = MyEvaluator if self.rotated else COCOEvaluator
             output_dir = self.cfg.OUTPUT_DIR
             os.makedirs(output_dir, exist_ok=True)
             evaluator = Evaluator(self.datasets['test'][0], self.cfg, False,

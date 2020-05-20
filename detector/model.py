@@ -46,7 +46,7 @@ def get_model_config(name="hrsc", level=0, rotated=False, pure=False):
         cfg.MODEL.RPN.HEAD_NAME = "StandardRPNHead"
         cfg.MODEL.RPN.BBOX_REG_WEIGHTS = (10, 10, 5, 5, 1)
         cfg.MODEL.ANCHOR_GENERATOR.NAME = "RotatedAnchorGenerator"
-        cfg.MODEL.ANCHOR_GENERATOR.ANGLES = [[-90, -60, -30, 0, 30, 60, 90]]
+        cfg.MODEL.ANCHOR_GENERATOR.ANGLES = [[-90, -60, -30, 0, 30, 60]]
         cfg.MODEL.ROI_HEADS.NAME = "RROIHeads"
         cfg.MODEL.ROI_BOX_HEAD.POOLER_TYPE = "ROIAlignRotated"
         cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_WEIGHTS = (10.0, 10.0, 5.0, 5.0, 10.0)

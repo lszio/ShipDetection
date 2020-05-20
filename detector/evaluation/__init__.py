@@ -1,2 +1,3 @@
 from .evaluator import MyEvaluator
-from .evaluator import Counter
+
+__all__ = [MyEvaluator]

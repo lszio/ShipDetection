@@ -69,7 +69,7 @@ class MyEvaluator(DatasetEvaluator):
         calc = DetectionEval(anns, preds)
         result = calc.inference()
         self._result["AP"] = {
-            self._metadata.thing_classes[k]: v
+            self._metadata.thing_classes[k]: v['ap']
             for k, v in result.items()
         }
         print(self._result)
@@ -94,9 +94,6 @@ class MyEvaluator(DatasetEvaluator):
         }
         return result
 
-    def _inference(self):
-        pass
-
     def _store(self):
         with open(os.path.join(self._output_dir, "predictions.json"),
                   'w') as f:
@@ -104,20 +101,6 @@ class MyEvaluator(DatasetEvaluator):
         with open(os.path.join(self._output_dir, "annotations.json"),
                   'w') as f:
             json.dump(self._annotations, f, indent=4)
-
-
-class Counter(DatasetEvaluator):
-    def reset(self):
-        self.count = 0
-        self._result = OrderedDict()
-
-    def process(self, inputs, outputs):
-        for output in outputs:
-            self.count += len(output["instances"])
-
-    def evaluate(self):
-        self._result['count'] = {'prediction': self.count}
-        return self._result
 
 
 class DetectionEval():
@@ -169,8 +152,13 @@ class DetectionEval():
         self._predictions = predictions
 
     def inference(self, threshold=0.5):
+        ann_count = {
+            category_id: 0
+            for category_id in self._annotations.keys()
+        }
         for category_id, category in self._annotations.items():
             for image_id, instances in category.items():
+                ann_count[category_id] += len(instances)
                 for instance in instances:
                     if category_id not in self._predictions.keys():
                         break
@@ -193,7 +181,6 @@ class DetectionEval():
                     preds.append((instance['score'], instance['tp']))
             preds = sorted(preds, key=lambda a: -a[0])
 
-            num_pred = len(preds)
             ps = []
             rs = []
             acc_ap = 0
@@ -204,8 +191,12 @@ class DetectionEval():
                 else:
                     acc_ar += 1
                 ps.append(acc_ap / (acc_ap + acc_ar))
-                rs.append(acc_ap / num_pred)
-            result[category_id] = self.my_ap(ps, rs)
+                rs.append(acc_ap / ann_count[category_id])
+            result[category_id] = {
+                'ap': self.my_ap(ps, rs),
+                'precision': ps[-1],
+                'recall': rs[-1]
+            }
             self.draw_curve(ps, rs)
         return result
 
@@ -229,8 +220,10 @@ class DetectionEval():
 
     @classmethod
     def draw_curve(cls, ps, rs):
-        plt.title("Curve")
-        plt.scatter(rs, ps)
+        plt.title("Precision x Recall curve")
+        plt.xlabel('Recall')
+        plt.xlabel('Precision')
+        plt.plot(rs, ps)
         plt.show()
 
     @classmethod
