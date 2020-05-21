@@ -15,19 +15,16 @@ def label_transform(label_in, level=1):
     wrapper = {
         0: "Other",
         1: "Other",
-        2: "Wing in ground",
+        2: "Other",
         3: "Other",
-        4: "High speed craft",
+        4: "Other",
         5: "Other",
-        6: "Passenger",
+        6: "Other",
         7: "Cargo",
         8: "Tanker",
         9: "Other"
     }
-    types = [
-        "Wing in ground", "High speed craft", "Passenger", "Cargo", "Tanker",
-        "Other"
-    ]
+    types = ["Cargo", "Tanker", "Other"]
     if type(label_in) == str:
         if label_in not in types:
             label_in = int(label_in) // 10
@@ -109,12 +106,9 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
         if rotated:
             obj = {
                 "bbox": [cx, cy, w, h, a],
-                "bbox_mode":
-                BoxMode.XYWHA_ABS,
-                "category_id":
-                label_transform(target['label'], level=level),
-                "iscrowd":
-                0
+                "bbox_mode": BoxMode.XYWHA_ABS,
+                "category_id": label_transform(target['label'], level=level),
+                "iscrowd": 0
             }
         else:
             hl = (w**2 + h**2)**0.5 * 0.5
@@ -122,12 +116,9 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
             y = hl * math.sin(ang) * 2.1
             obj = {
                 "bbox": [cx - x, cy - y, cx + x, cy + y],
-                "bbox_mode":
-                BoxMode.XYXY_ABS,
-                "category_id":
-                label_transform(target['label'], level=level),
-                "iscrowd":
-                0
+                "bbox_mode": BoxMode.XYXY_ABS,
+                "category_id": label_transform(target['label'], level=level),
+                "iscrowd": 0
             }
         record["annotations"] = [obj]
         dataset_dicts.append(record)
@@ -143,6 +134,7 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
     dataset_dicts = []
     for category_id, category in categories.items():
         num_ship = len(category)
+        print('c:{}-num:{}'.format(category_id, num_ship))
         dataset_dicts += category[:-num_ship //
                                   5] if part != 'test' else category[
                                       -num_ship // 5:]
@@ -153,13 +145,7 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
     return dataset_dicts
 
 
-classes_list = {
-    0: ["ship"],
-    1: [
-        "Wing in ground", "High speed craft", "Passenger", "Cargo", "Tanker",
-        "Other"
-    ]
-}
+classes_list = {0: ["ship"], 1: ["Cargo", "Tanker", "Other"]}
 
 
 def register_opensar_datasets():
