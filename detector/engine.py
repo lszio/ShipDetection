@@ -3,7 +3,6 @@ import copy
 import numpy as np
 import cv2
 import torch
-from pathlib import Path
 from detectron2.engine import DefaultTrainer, DefaultPredictor
 from detectron2.structures import BoxMode
 from detectron2.data import detection_utils as utils
@@ -98,12 +97,6 @@ class Detector():
         self.metadata = MetadataCatalog.get(self.datasets['train'][0])
         self.predictor = None
 
-    def clear_cache(self):
-        output_dir = Path(self.cfg.OUTPUT_DIR)
-        if output_dir.exists():
-            for f in output_dir.glob("*coco_format*"):
-                f.unlink()
-
     def train(self, resume=True):
         os.makedirs(self.cfg.OUTPUT_DIR, exist_ok=True)
         trainer = MyTrainer(self.cfg) if self.rotated else DefaultTrainer(
@@ -136,9 +129,9 @@ class Detector():
         trainer = MyTrainer(self.cfg) if self.rotated else DefaultTrainer(
             self.cfg)
         trainer.resume_or_load(resume=True)
+        output_dir = self.cfg.OUTPUT_DIR
         if not evaluator:
             Evaluator = MyEvaluator if self.rotated else COCOEvaluator
-            output_dir = self.cfg.OUTPUT_DIR
             os.makedirs(output_dir, exist_ok=True)
             evaluator = Evaluator(self.datasets['test'][0], self.cfg, False,
                                   output_dir)
