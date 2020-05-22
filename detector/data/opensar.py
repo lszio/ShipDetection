@@ -54,11 +54,12 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
             info = ship[0]
             target['ht'] = [int(info[i].text) for i in [1, 2, 3, 4]]
             target['box'] = [int(info[i].text) for i in [7, 8, 5, 6]]
+            box = target['box']
             target['center'] = [int(info[9].text), int(info[10].text)]
             target['label'] = ship[1].find("Ship_Type").text
             trainfo = ship[3]
-            target['length'] = float(trainfo[0].text)
-            target['width'] = float(trainfo[1].text)
+            target['ship_length'] = float(trainfo[0].text)
+            target['ship_width'] = float(trainfo[1].text)
             targets['{}_{}'.format(*target['center'])] = target
             num_anns += 1
 
@@ -93,16 +94,18 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
         height, width = target['height'], target['width']
         record["height"] = height
         record["width"] = width
-        cx, cy = width / 2, height / 2
+        center = target['center']
         ht = target['ht']
         box = target['box']
+        cx = (center[0] - box[0]) / (box[2] - box[0]) * width
+        cy = (center[1] - box[1]) / (box[3] - box[1]) * height
         w = ((ht[2] - ht[0])**2 + (ht[3] - ht[1])**2)**0.5
-        ang = math.asin(abs(ht[3] - ht[1]) / w)
-        a = ang / 3.1415926 * 180
+        ang = math.asin(abs((ht[3] - ht[1]) / w))
         if (ht[2] - ht[0]) * (ht[3] - ht[1]) > 0:
-            a = -a
+            ang = -ang
+        a = ang / 3.1415926 * 180
         w = w / (box[2] - box[0]) * width
-        h = w / target['length'] * target['width']
+        h = w / target['ship_length'] * target['ship_width'] * 1.2
         if rotated:
             obj = {
                 "bbox": [cx, cy, w, h, a],
@@ -111,11 +114,25 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
                 "iscrowd": 0
             }
         else:
-            hl = (w**2 + h**2)**0.5 * 0.5
-            x = hl * math.cos(ang) * 1.5
-            y = hl * math.sin(ang) * 2.1
+            delta_y = w * math.sin(ang) / 2 * 1.2
+            delta_x = w * math.cos(ang) / 2 * 1.2
+            t1 = (cx - delta_x, cy - delta_y)
+            t2 = (cx + delta_x, cy + delta_y)
+            delta_y = h * math.cos(ang) / 2 * 1.2
+            delta_x = h * math.sin(ang) / 2 * 1.2
+            xs = []
+            ys = []
+            for t in [t1, t2]:
+                xs.append(t[0] - delta_x)
+                xs.append(t[0] + delta_x)
+                ys.append(t[1] - delta_y)
+                ys.append(t[1] + delta_y)
+            xmin = min(xs)
+            ymin = min(ys)
+            xmax = max(xs)
+            ymax = max(ys)
             obj = {
-                "bbox": [cx - x, cy - y, cx + x, cy + y],
+                "bbox": [xmin, ymin, xmax, ymax],
                 "bbox_mode": BoxMode.XYXY_ABS,
                 "category_id": label_transform(target['label'], level=level),
                 "iscrowd": 0
@@ -134,14 +151,9 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
     dataset_dicts = []
     for category_id, category in categories.items():
         num_ship = len(category)
-        print('c:{}-num:{}'.format(category_id, num_ship))
         dataset_dicts += category[:-num_ship //
                                   5] if part != 'test' else category[
                                       -num_ship // 5:]
-    # print('num_anns={}'.format(num_anns))
-    # print('num_chips={}'.format(num_chips))
-    # print('num_imgs={}'.format(num_imgs))
-    # print('len(temp)={}'.format(len(temp)))
     return dataset_dicts
 
 
@@ -169,6 +181,8 @@ if __name__ == "__main__":
     DatasetCatalog.list()
     dataset = DatasetCatalog.get("opensar_1_train")
     print(len(dataset))
-    dataset = DatasetCatalog.get("opensar_1_test")
-    print(len(dataset))
-    print(dataset[0])
+    for i in dataset:
+        box = i['annotations'][0]['bbox']
+        for j in box:
+            if j < 0 or j > i['width']:
+                print(i)
