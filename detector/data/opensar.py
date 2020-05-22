@@ -64,26 +64,26 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
             num_anns += 1
 
         img_size_dict = {}
-        if not (folder / "chip_size.txt").exists():
-            with open(folder / "chip_size.txt", 'w') as f:
+        if not (folder / ".size_cache.txt").exists():
+            with open(folder / ".size_cache.txt", 'w') as f:
                 for img in (folder / "Patch_Uint8").glob('*'):
                     x, y = img.name.split("_")[-3:-1]
                     name = x + "_" + y
                     size = Image.open(img).size
-                    f.write("{} {}\n".format(name, size[0]))
-        with open(folder / "chip_size.txt", 'r') as f:
+                    f.write("{} {} {}\n".format(name, size[0], size[1]))
+        with open(folder / ".size_cache.txt", 'r') as f:
             for line in f.readlines():
                 item = line.strip().split(" ")
-                img_size_dict[item[0]] = item[1]
+                img_size_dict[item[0]] = (item[1], item[2])
         num_chips += len(img_size_dict)
         for image in (folder / "Patch_Uint8").glob('*'):
             x, y, t = image.name.split("_")[-3:]
             num_imgs += 1
             target = targets["{}_{}".format(x[1:], y[1:])]
             target['file_name'] = str(image)
-            size = int(img_size_dict["{}_{}".format(x, y)])
-            target['width'] = size
-            target['height'] = size
+            width, height = img_size_dict["{}_{}".format(x, y)]
+            target['width'] = int(width)
+            target['height'] = int(height)
             temp.append(target)
 
     dataset_dicts = []
@@ -186,9 +186,5 @@ if __name__ == "__main__":
     print(len(dataset))
     cnt = 0
     for i in dataset:
-        box = i['annotations'][0]['bbox']
-        for j in box:
-            if not 0 < j < i['width']:
-                print(i['annotations'][0]['bbox'][0] == 'nan')
-                cnt += 1
-    print(cnt)
+        if not i['width'] == i['height']:
+            print(i)
