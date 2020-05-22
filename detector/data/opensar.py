@@ -88,6 +88,9 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
 
     dataset_dicts = []
     for index, target in enumerate(temp):
+        if math.isnan(target['ship_width']) or math.isnan(
+                target['ship_length']):
+            continue
         record = {}
         record["file_name"] = target['file_name']
         record["image_id"] = index
@@ -181,8 +184,11 @@ if __name__ == "__main__":
     DatasetCatalog.list()
     dataset = DatasetCatalog.get("opensar_1_train")
     print(len(dataset))
+    cnt = 0
     for i in dataset:
         box = i['annotations'][0]['bbox']
         for j in box:
-            if j < 0 or j > i['width']:
-                print(i)
+            if not 0 < j < i['width']:
+                print(i['annotations'][0]['bbox'][0] == 'nan')
+                cnt += 1
+    print(cnt)
