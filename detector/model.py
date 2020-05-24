@@ -34,8 +34,8 @@ def get_model_config(name="hrsc", level=0, rotated=False, pure=False):
 
     cfg.DATALOADER.NUM_WORKERS = 4
     cfg.SOLVER.IMS_PER_BATCH = 4
-    cfg.SOLVER.BASE_LR = 0.05
-    cfg.SOLVER.MAX_ITER = 6300
+    cfg.SOLVER.BASE_LR = 0.0005
+    cfg.SOLVER.MAX_ITER = 12600
     cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(
         MetadataCatalog.get(train_datasets[0]).thing_classes)
