@@ -33,8 +33,8 @@ def get_model_config(name="hrsc", level=0, rotated=False, pure=False):
     cfg.DATASETS.TEST = test_datasets
 
     cfg.DATALOADER.NUM_WORKERS = 4
-    cfg.SOLVER.IMS_PER_BATCH = 4
-    cfg.SOLVER.BASE_LR = 0.0005
+    cfg.SOLVER.IMS_PER_BATCH = 8
+    cfg.SOLVER.BASE_LR = 0.005
     cfg.SOLVER.MAX_ITER = 12600
     cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(

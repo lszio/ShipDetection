@@ -3,6 +3,7 @@ import copy
 import numpy as np
 import cv2
 import torch
+from pathlib import Path
 from detectron2.engine import DefaultTrainer, DefaultPredictor
 from detectron2.structures import BoxMode
 from detectron2.data import detection_utils as utils
@@ -147,7 +148,7 @@ class Detector():
             torch.device("cpu")))
         return v.get_image()[:, :, ::-1]
 
-    def inference(self, dataset_name=None, output_dir=None):
+    def inference_dataset(self, dataset_name=None, output_dir=None):
         if not dataset_name:
             dataset_name = self.cfg.DATASETS.TEST[0]
         if not output_dir:
@@ -181,6 +182,29 @@ class Detector():
                         *[str(i) for i in instance['bbox']]
                     ]
                     f.write(" ".join(line) + "\n")
+
+    def inference(self, image_path=None, image=None):
+        if not image:
+            im = image
+        else:
+            assert Path(image_path).exists() is True
+            im = cv2.imread(str(image_path))
+        preds = self.predict(im)
+        instances = preds["instances"].to(torch.device("cpu"))
+        boxes = instances.pred_boxes.tensor.numpy()
+        boxes = boxes.tolist()
+        scores = instances.scores.tolist()
+        classes = instances.pred_classes.tolist()
+        result = []
+        thing_classes = MetadataCatalog.get(
+            self.cfg.DATASETS.TRAIN[0]).thing_classes
+        for box, score, category_id in zip(boxes, scores, classes):
+            result.append({
+                'bbox': box,
+                'score': score,
+                'class': thing_classes[category_id]
+            })
+        return result
 
 
 def get_detector(name):
