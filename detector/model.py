@@ -8,10 +8,14 @@ from .data import register_datasets
 root = Path(os.path.abspath(os.path.dirname(__file__))).parent
 
 
-def get_model_config(name="hrsc", level=0, rotated=False, pure=False):
-    config_name = name + "_" + str(level) + ("_p" if pure else
-                                             "") + ("_r" if rotated else "")
-    output_dir = root / "outputs" / config_name
+def get_model_config(name="hrsc",
+                     level=0,
+                     rotated=False,
+                     pure=False,
+                     split=None):
+    config_name = name + "_" + str(level) + ("_p" if pure else "") + (
+        "_" + split if split else "") + ("_r" if rotated else "")
+    output_dir = root / "models" / config_name
     cfg = get_cfg()
     cfg.merge_from_file(
         model_zoo.get_config_file(
@@ -49,27 +53,49 @@ def get_model_config(name="hrsc", level=0, rotated=False, pure=False):
         cfg.MODEL.ANCHOR_GENERATOR.ANGLES = [[-90, -60, -30, 0, 30, 60]]
         cfg.MODEL.ROI_HEADS.NAME = "RROIHeads"
         cfg.MODEL.ROI_BOX_HEAD.POOLER_TYPE = "ROIAlignRotated"
-        cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_WEIGHTS = (10.0, 10.0, 5.0, 5.0, 10.0)
+        cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_WEIGHTS = (1, 1, 5, 5, 25)
 
     return cfg
 
 
 register_datasets()
 cfgs = {
-    "hrsc_0": get_model_config(),
-    "hrsc_0_r": get_model_config(rotated=True),
-    "hrsc_1": get_model_config(level=1),
-    "hrsc_1_r": get_model_config(rotated=True, level=1),
-    "hrsc_2": get_model_config(level=2),
-    "hrsc_2_r": get_model_config(rotated=True, level=2),
-    "hrsc_1_p": get_model_config(level=1, pure=True),
-    "hrsc_1_p_r": get_model_config(rotated=True, level=1, pure=True),
-    "hrsc_2_p": get_model_config(level=2, pure=True),
-    "hrsc_2_p_r": get_model_config(rotated=True, level=2, pure=True),
-    "opensar_0": get_model_config('opensar', rotated=False),
-    "opensar_1": get_model_config('opensar', level=1, rotated=False),
-    "opensar_0_r": get_model_config('opensar', rotated=True),
-    "opensar_1_r": get_model_config('opensar', level=1, rotated=True)
+    "hrsc_0":
+    get_model_config(),
+    "hrsc_0_r":
+    get_model_config(rotated=True),
+    "hrsc_1":
+    get_model_config(level=1),
+    "hrsc_1_r":
+    get_model_config(rotated=True, level=1),
+    "hrsc_2":
+    get_model_config(level=2),
+    "hrsc_2_r":
+    get_model_config(rotated=True, level=2),
+    "hrsc_1_p":
+    get_model_config(level=1, pure=True),
+    "hrsc_1_p_r":
+    get_model_config(rotated=True, level=1, pure=True),
+    "hrsc_2_p":
+    get_model_config(level=2, pure=True),
+    "hrsc_2_p_r":
+    get_model_config(rotated=True, level=2, pure=True),
+    "opensar_0":
+    get_model_config('opensar', rotated=False),
+    "opensar_1":
+    get_model_config('opensar', level=1, rotated=False),
+    "opensar_0_r":
+    get_model_config('opensar', rotated=True),
+    "opensar_1_r":
+    get_model_config('opensar', level=1, rotated=True),
+    "opensar_0_vv":
+    get_model_config('opensar', rotated=False, split='vv'),
+    "opensar_1_vv":
+    get_model_config('opensar', level=1, rotated=False, split='vv'),
+    "opensar_0_vv_r":
+    get_model_config('opensar', rotated=True, split='vv'),
+    "opensar_1_vv_r":
+    get_model_config('opensar', level=1, rotated=True, split='vv')
 }
 
 if __name__ == "__main__":

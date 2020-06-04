@@ -9,6 +9,9 @@ models
 inference
 temp
 
+app/images
+app/models
+
 *.ipynb
 
 .ipynb_checkpoints

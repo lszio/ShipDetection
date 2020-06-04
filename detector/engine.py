@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import torch
 from pathlib import Path
+from PIL import Image
 from detectron2.engine import DefaultTrainer, DefaultPredictor
 from detectron2.structures import BoxMode
 from detectron2.data import detection_utils as utils
@@ -140,10 +141,8 @@ class Detector():
 
     def draw_preds(self, im):
         outputs = self.predict(im)
-        print(outputs)
         visualizerClass = myVisualizer if self.rotated else Visualizer
         v = visualizerClass(im[:, :, ::-1], metadata=self.metadata)
-        print(v)
         v = v.draw_instance_predictions(outputs["instances"].to(
             torch.device("cpu")))
         return v.get_image()[:, :, ::-1]
@@ -205,6 +204,30 @@ class Detector():
                 'class': thing_classes[category_id]
             })
         return result
+
+    def inference_pil(self, image):
+        im = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
+        preds = self.predict(im)
+        instances = preds["instances"].to(torch.device("cpu"))
+        boxes = instances.pred_boxes.tensor.numpy()
+        boxes = boxes.tolist()
+        scores = instances.scores.tolist()
+        classes = instances.pred_classes.tolist()
+        result = []
+        thing_classes = MetadataCatalog.get(
+            self.cfg.DATASETS.TRAIN[0]).thing_classes
+        for box, score, category_id in zip(boxes, scores, classes):
+            result.append({
+                'bbox': box,
+                'score': score,
+                'class': thing_classes[category_id]
+            })
+        visualizerClass = myVisualizer if self.rotated else Visualizer
+        v = visualizerClass(im[:, :, ::-1], metadata=self.metadata)
+        v = v.draw_instance_predictions(instances)
+        im_p = v.get_image()[:, :, ::-1]
+        img_c = Image.fromarray(cv2.cvtColor(im_p, cv2.COLOR_BGR2RGB))
+        return img_c, result
 
 
 def get_detector(name):
