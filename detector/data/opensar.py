@@ -38,7 +38,7 @@ def label_transform(label_in, level=1):
         return types[label_in]
 
 
-def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
+def get_opensar_dicts(path, img_type='all', level=0, part="all", rotated=True):
     targets = []
     folders = [folder for folder in path.glob("S*")]
     assert part in ['all', 'train', 'test']
@@ -78,6 +78,9 @@ def get_opensar_dicts(path, img_type='vv', level=0, part="all", rotated=True):
         num_chips += len(img_size_dict)
         for image in (folder / "Patch_Uint8").glob('*'):
             x, y, t = image.name.split("_")[-3:]
+            if not img_type == 'all':
+                if t != img_type:
+                    continue
             num_imgs += 1
             target = targets["{}_{}".format(x[1:], y[1:])]
             target['file_name'] = str(image)
@@ -164,19 +167,23 @@ classes_list = {0: ["ship"], 1: ["Cargo", "Tanker", "Other"]}
 
 
 def register_opensar_datasets():
-    for rotated in [True, False]:
-        for part in ['train', 'test']:
-            for level, thing_classes in classes_list.items():
-                name = "opensar_" + str(level) + ("_r" if rotated else
-                                                  "") + "_" + part
-                DatasetCatalog.register(
-                    name,
-                    lambda level=level, part=part, rotated=rotated:
-                    get_opensar_dicts(root / "dataset" / "OpenSarShip",
-                                      part=part,
-                                      level=level,
-                                      rotated=rotated))
-                MetadataCatalog.get(name).set(thing_classes=thing_classes)
+    for img_type in ['all', 'vh', 'vv']:
+        for rotated in [True, False]:
+            for part in ['train', 'test']:
+                for level, thing_classes in classes_list.items():
+                    name = "opensar_" + str(level) + (
+                        "_" if img_type == 'all' else "_" + img_type +
+                        "_") + ("r_" if rotated else "") + part
+                    DatasetCatalog.register(
+                        name,
+                        lambda level=level, part=part, rotated=rotated,
+                        img_type=img_type: get_opensar_dicts(root / "dataset" /
+                                                             "OpenSarShip",
+                                                             part=part,
+                                                             level=level,
+                                                             img_type=img_type,
+                                                             rotated=rotated))
+                    MetadataCatalog.get(name).set(thing_classes=thing_classes)
 
 
 if __name__ == "__main__":
