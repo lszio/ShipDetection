@@ -5,7 +5,7 @@ import torch
 from collections import OrderedDict
 from detectron2.data import MetadataCatalog, DatasetCatalog
 from detectron2.evaluation import DatasetEvaluator
-from detectron2.structures import BoxMode
+# from detectron2.structures import BoxMode
 import matplotlib.pyplot as plt
 
 
@@ -35,9 +35,6 @@ class MyEvaluator(DatasetEvaluator):
             if num_instance == 0:
                 continue
             boxes = instances.pred_boxes.tensor.numpy()
-            if boxes.shape[1] == 4:
-                boxes = BoxMode.convert(boxes, BoxMode.XYXY_ABS,
-                                        BoxMode.XYWH_ABS)
             boxes = boxes.tolist()
             scores = instances.scores.tolist()
             classes = instances.pred_classes.tolist()
@@ -66,10 +63,18 @@ class MyEvaluator(DatasetEvaluator):
                     *record['bbox']
                 ]
                 preds.append(pred)
-        calc = DetectionEval(anns, preds)
+        calc = DetectionEval(anns, preds, self._metadata.thing_classes)
         result = calc.inference()
         self._result["AP"] = {
             self._metadata.thing_classes[k]: v['ap']
+            for k, v in result.items()
+        }
+        self._result["Precision"] = {
+            self._metadata.thing_classes[k]: v['precision']
+            for k, v in result.items()
+        }
+        self._result["Recall"] = {
+            self._metadata.thing_classes[k]: v['recall']
             for k, v in result.items()
         }
         print(self._result)
@@ -104,9 +109,10 @@ class MyEvaluator(DatasetEvaluator):
 
 
 class DetectionEval():
-    def __init__(self, anns=None, preds=None):
+    def __init__(self, anns=None, preds=None, thing_classes=None):
         self._predictions = {}
         self._annotations = {}
+        self.thing_classes = thing_classes
         if anns and preds:
             if isinstance(anns, list):
                 self.update_dict(*self.get_data_from_list(anns, preds))
@@ -180,7 +186,8 @@ class DetectionEval():
                 for instance in instances:
                     preds.append((instance['score'], instance['tp']))
             preds = sorted(preds, key=lambda a: -a[0])
-
+            if not preds[0][1]:
+                preds = preds[1:]
             ps = []
             rs = []
             acc_ap = 0
@@ -197,20 +204,22 @@ class DetectionEval():
                 'precision': ps[-1],
                 'recall': rs[-1]
             }
-            self.draw_curve(ps, rs)
+            if self.thing_classes:
+                name = self.thing_classes[category_id]
+            self.draw_curve(ps, rs, class_name=name)
         return result
 
     @classmethod
     def iou(cls, box1, box2):
-        if len(box1) == len(box2) == 4:
+        assert len(box1) == len(box2)
+        if len(box1) == 4:
             in_h = min(box1[2], box2[2]) - max(box1[0], box2[0])
             in_w = min(box1[3], box2[3]) - max(box1[1], box2[1])
             inter = 0 if in_h < 0 or in_w < 0 else in_h * in_w
             union = (box1[2] - box1[0]) * (box1[3] - box1[1]) + \
                     (box2[2] - box2[0]) * (box2[3] - box2[1]) - inter
             return inter / union
-        elif len(box1) == len(box2) == 5:
-            assert len(box1) == len(box2) == 5
+        elif len(box1) == 5:
             a = ((box1[0], box1[1]), (box1[2], box1[3]), box1[4])
             b = ((box2[0], box2[1]), (box2[2], box2[3]), box2[4])
             i = cv2.rotatedRectangleIntersection(a, b)
@@ -219,10 +228,14 @@ class DetectionEval():
             return cv2.contourArea(i[1])
 
     @classmethod
-    def draw_curve(cls, ps, rs):
-        plt.title("Precision x Recall curve")
+    def draw_curve(cls, ps, rs, class_name=None):
+        if class_name:
+            title = "Precision x Recall curve: " + class_name
+        else:
+            title = "Precision x Recall curve"
+        plt.title(title)
         plt.xlabel('Recall')
-        plt.xlabel('Precision')
+        plt.ylabel('Precision')
         plt.plot(rs, ps)
         plt.show()
 
@@ -234,3 +247,10 @@ class DetectionEval():
             ap += p * (r - pre)
             pre = r
         return ap
+
+
+if __name__ == "__main__":
+    e = DetectionEval()
+    a = [2, 2, 4, 4]
+    b = [3, 1, 5, 3]
+    print(e.iou(a, b))

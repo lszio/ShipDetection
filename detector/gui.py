@@ -23,8 +23,10 @@ class GUI():
         self.mode_id = tk.IntVar()
         self.mode_id.set(0)
         self.menubar = self.init_menu()
+        self.detector = None
         self.init_weights()
         self.init_app()
+        self.change_mode()
 
     def init_weights(self):
         img_frame = tk.Frame(self.root)
@@ -71,20 +73,19 @@ class GUI():
         menubar.add_cascade(label="操作", menu=edit_menu)
 
         mode_menu = tk.Menu(menubar, tearoff=0)
-        model_path = ROOT / 'outputs'
+        model_path = ROOT / 'models'
         index = 0
         for path in model_path.iterdir():
             if not (path / 'model_final.pth').exists():
                 continue
             mode_menu.add_radiobutton(label=path.name,
                                       value=index,
-                                      variable=self.mode_id)
+                                      variable=self.mode_id,
+                                      command=self.change_mode)
             self.modes.append(path.name)
             index += 1
         menubar.add_cascade(label='模式', menu=mode_menu)
-
         menubar.add_command(label='关于')
-
         self.root.config(menu=menubar)
         return menubar
 
@@ -101,6 +102,11 @@ class GUI():
         self.imgs = list(path)
         self.show_image()
 
+    def change_mode(self):
+        name = self.modes[self.mode_id.get()]
+        self.detector = detectors[name]()
+        self.log("切换到{}模式".format(name))
+
     def open_folder(self, path=None):
         if not path:
             path = filedialog.askdirectory()
@@ -110,10 +116,11 @@ class GUI():
         self.imgs = []
         for file_path in path.iterdir():
             name = file_path.name
-            img_types = ['tif', 'jpg', 'png']
+            img_types = ['tif', 'jpg', 'png', 'bmp']
             if not name.split('.')[-1] in img_types or name[0] == '.':
                 continue
-            self.imgs.append(file_path)
+            self.imgs.append(str(file_path))
+        self.log('检测到{}张图片'.format(len(self.imgs)))
         self.show_image()
 
     def show_image(self, img=None):
@@ -133,10 +140,10 @@ class GUI():
     def inference(self, img=None):
         start = time.time()
         self.log("正在标注", end='...')
-        detector = detectors[self.modes[self.mode_id.get()]]()
+        # detector = detectors[self.modes[self.mode_id.get()]]()
         if not img:
             img = self.get_image()
-        img_p, result = detector.inference_pil(img)
+        img_p, result = self.detector.inference_pil(img)
         self.show_image(img_p)
         end = time.time()
         self.log("标注完成， 共耗时{:.2f}s".format(end - start))
