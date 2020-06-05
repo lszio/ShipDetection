@@ -105,7 +105,7 @@ class GUI():
     def change_mode(self):
         name = self.modes[self.mode_id.get()]
         self.detector = detectors[name]()
-        self.log("切换到{}模式".format(name))
+        self.log("切换到{}模式".format(name), clear=True)
 
     def open_folder(self, path=None):
         if not path:
@@ -151,6 +151,8 @@ class GUI():
         for item in result:
             bbox = "{: <4.0f},{: <4.0f},{: <4.0f},{: <4.0f}".format(
                 *item['bbox'])
+            if len(item['bbox']) > 4:
+                bbox += ",{: >2.0f}\u00B0".format(item['bbox'][-1])
             self.log(" 类别：{: <9}, 置信度：{: >3.0%}, 位置：{}".format(
                 item['class'], item['score'], bbox))
         return img_p, result
